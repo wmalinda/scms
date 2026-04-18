@@ -1,14 +1,21 @@
 package com.scms.service;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import com.scms.domain.Administrator;
 import com.scms.domain.AppNotification;
+import com.scms.domain.Booking;
+import com.scms.domain.Room;
+import com.scms.domain.RoomCategory;
 import com.scms.domain.StaffMember;
 import com.scms.domain.Student;
 import com.scms.domain.User;
+import com.scms.pattern.factory.RoomFactory;
+
 
 /**
  * Creational: Singleton — in-memory store with pre-loaded demo data (no database).
@@ -19,6 +26,8 @@ public final class CampusRepository {
 
     private final List<User> users = new ArrayList<>();
     private final List<AppNotification> notificationLog = new ArrayList<>();
+     private final List<Room> rooms = new ArrayList<>();
+    private final List<Booking> bookings = new ArrayList<>();
 
     private CampusRepository(boolean withSeed) {
         if (withSeed) {
@@ -55,6 +64,16 @@ public final class CampusRepository {
         users.add(new Student(studentId, "student1", "Chris Student"));
         users.add(new Student(student2Id, "student2", "Jamie Learner"));
 
+        Room r1 = RoomFactory.create(RoomCategory.LECTURE_HALL, "Lecture Theatre A", 120,
+                List.of("4K projector", "PA", "Hearing loop"));
+        Room r2 = RoomFactory.create(RoomCategory.LAB, "Computing Lab 2", 40,
+                List.of("30 PCs", "Smart board"));
+        Room r3 = RoomFactory.create(RoomCategory.MEETING_ROOM, "Meeting Pod 5", 8,
+                List.of("Display", "Whiteboard"));
+        rooms.add(r1);
+        rooms.add(r2);
+        rooms.add(r3);
+
     }
 
     public Optional<User> findUserByUsername(String username) {
@@ -67,6 +86,48 @@ public final class CampusRepository {
 
     public void appendNotification(AppNotification n) {
         notificationLog.add(n);
+    }
+
+    public List<User> getUsers() {
+        return Collections.unmodifiableList(users);
+    }
+
+    public List<Room> getRooms() {
+        return Collections.unmodifiableList(rooms);
+    }
+
+    public Optional<Room> findRoomById(String id) {
+        return rooms.stream().filter(r -> r.getId().equals(id)).findFirst();
+    }
+
+    public void addRoom(Room room) throws com.scms.exception.DuplicateDataException {
+        if (rooms.stream().anyMatch(r -> r.getId().equals(room.getId()))) {
+            throw new com.scms.exception.DuplicateDataException("Room id already exists: " + room.getId());
+        }
+        rooms.add(room);
+    }
+
+    public void addBooking(Booking b) throws com.scms.exception.DuplicateDataException {
+        if (bookings.stream().anyMatch(x -> x.getId().equals(b.getId()))) {
+            throw new com.scms.exception.DuplicateDataException("Duplicate booking id.");
+        }
+        bookings.add(b);
+    }
+
+    public List<Booking> getBookings() {
+        return Collections.unmodifiableList(bookings);
+    }
+
+    public boolean removeBooking(String bookingId) {
+        return bookings.removeIf(b -> b.getId().equals(bookingId));
+    }
+
+    public List<Booking> bookingsForRoom(String roomId) {
+        return bookings.stream().filter(b -> b.getRoomId().equals(roomId)).collect(Collectors.toList());
+    }
+
+    public List<Booking> bookingsForUser(String userId) {
+        return bookings.stream().filter(b -> b.getUserId().equals(userId)).collect(Collectors.toList());
     }
 
 }
