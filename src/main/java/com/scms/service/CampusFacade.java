@@ -2,10 +2,16 @@ package com.scms.service;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import com.scms.domain.Booking;
+import com.scms.domain.MaintenanceRequest;
+import com.scms.domain.MaintenanceStatus;
+import com.scms.domain.MaintenanceUrgency;
 import com.scms.domain.Room;
 import com.scms.domain.RoomCategory;
 import com.scms.domain.User;
@@ -23,6 +29,7 @@ public class CampusFacade {
     private final CampusRepository repository;
     private final NotificationService notificationService;
     private final BookingService bookingService;
+    private final MaintenanceService maintenanceService;
 
     public CampusFacade() {
         this(CampusRepository.getInstance(), new NotificationService(CampusRepository.getInstance()));
@@ -32,6 +39,7 @@ public class CampusFacade {
         this.repository = repository;
         this.notificationService = notificationService;
         this.bookingService = new BookingService(repository, notificationService);
+        this.maintenanceService = new MaintenanceService(repository, notificationService);
     }
 
     public CampusRepository getRepository() {
@@ -99,6 +107,31 @@ public class CampusFacade {
     public void cancelBooking(User actor, String bookingId, String reason)
             throws InvalidBookingException, UnauthorizedActionException {
         bookingService.cancelBooking(actor, bookingId, reason);
+    }
+
+    public MaintenanceRequest submitMaintenance(User actor, String roomId, String description,
+                                                MaintenanceUrgency urgency)
+            throws DuplicateDataException {
+        return maintenanceService.reportIssue(actor, roomId, description, urgency);
+    }
+
+    public void assignMaintenance(User actor, String requestId, MaintenanceStatus status, String assignToUserId)
+            throws UnauthorizedActionException, ScmsSystemException {
+        maintenanceService.updateStatus(actor, requestId, status, assignToUserId);
+    }
+
+    /** Simple analytics: room booking counts and maintenance keywords. */
+    public Map<String, Long> roomBookingCounts() {
+        return repository.getBookings().stream()
+                .collect(Collectors.groupingBy(Booking::getRoomId, Collectors.counting()));
+    }
+
+    public Map<String, Long> maintenanceDescriptionTokens() {
+        return repository.getMaintenanceRequests().stream()
+                .map(r -> r.getDescription().toLowerCase(Locale.ROOT).split("\\W+"))
+                .flatMap(Arrays::stream)
+                .filter(s -> s.length() > 3)
+                .collect(Collectors.groupingBy(s -> s, Collectors.counting()));
     }
 
 }

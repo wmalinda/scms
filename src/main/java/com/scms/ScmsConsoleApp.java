@@ -11,10 +11,15 @@ import java.util.Scanner;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import com.scms.domain.AppNotification;
 import com.scms.domain.Booking;
+import com.scms.domain.MaintenanceRequest;
+import com.scms.domain.MaintenanceStatus;
+import com.scms.domain.MaintenanceUrgency;
 import com.scms.domain.Room;
 import com.scms.domain.RoomCategory;
 import com.scms.domain.User;
+import com.scms.domain.UserRole;
 import com.scms.exception.DuplicateDataException;
 import com.scms.exception.InvalidBookingException;
 import com.scms.exception.ScmsSystemException;
@@ -101,9 +106,9 @@ public final class ScmsConsoleApp {
                         case 1 -> listRoomsAdmin();
                         case 2 -> addRoom();
                         case 3 -> deactivateRoom();
-                        // case 4 -> adminMaintenance();
-                        // case 5 -> analytics();
-                        // case 6 -> viewNotifications();
+                        case 4 -> adminMaintenance();
+                        case 5 -> analytics();
+                        case 6 -> viewNotifications();
                     }
                 }
                 case STAFF -> {
@@ -121,8 +126,8 @@ public final class ScmsConsoleApp {
                         case 1 -> listRoomsActive();
                         case 2 -> bookRoom();
                         case 3 -> myBookings();
-                        // case 4 -> reportMaintenance();
-                        // case 5 -> viewNotifications();
+                        case 4 -> reportMaintenance();
+                        case 5 -> viewNotifications();
                     }
                 }
                 case STUDENT -> {
@@ -140,8 +145,8 @@ public final class ScmsConsoleApp {
                         case 1 -> listRoomsActive();
                         case 2 -> bookRoom();
                         case 3 -> myBookings();
-                        // case 4 -> reportMaintenance();
-                        // case 5 -> viewNotifications();
+                        case 4 -> reportMaintenance();
+                        case 5 -> viewNotifications();
                     }
                 }
             }
@@ -243,6 +248,87 @@ public final class ScmsConsoleApp {
             } catch (InvalidBookingException | UnauthorizedActionException e) {
                 println("Error: " + e.getMessage());
             }
+        }
+    }
+
+    private void reportMaintenance() {
+        List<Room> rooms = facade.listActiveRooms();
+        if (rooms.isEmpty()) {
+            println("No active rooms.");
+            return;
+        }
+        println("\n-- Report maintenance --");
+        IntStream.range(0, rooms.size()).forEach(i -> println("  " + (i + 1) + ". " + rooms.get(i).getName()));
+        int idx = readInt("Room #: ", 1, rooms.size()) - 1;
+        MaintenanceUrgency u = pickEnum("Urgency", MaintenanceUrgency.values());
+        String desc = readLine("Description: ");
+        try {
+            MaintenanceRequest r = facade.submitMaintenance(currentUser, rooms.get(idx).getId(), desc, u);
+            println("Submitted request " + r.getId());
+        } catch (DuplicateDataException e) {
+            println("Error: " + e.getMessage());
+        }
+    }
+
+    private void adminMaintenance() {
+        List<MaintenanceRequest> all = facade.getRepository().getMaintenanceRequests();
+        println("\n-- Maintenance requests --");
+        if (all.isEmpty()) {
+            println("  (none)");
+            return;
+        }
+        IntStream.range(0, all.size()).forEach(i -> {
+            MaintenanceRequest m = all.get(i);
+            println("  " + (i + 1) + ". " + m.getId());
+            println("      room=" + m.getRoomId() + " | " + m.getUrgency() + " | " + m.getStatus());
+            println("      " + m.getDescription());
+            String aid = m.getAssignedToUserId();
+            if (aid != null && !aid.isBlank()) {
+                String line = facade.getRepository().findUserById(aid)
+                        .map(u -> "assigned: " + u.getDisplayName() + " (id=" + u.getId() + ")")
+                        .orElse("assigned user id: " + aid + " (not found)");
+                println("      " + line);
+            } else {
+                println("      assigned: (none)");
+            }
+        });
+        int idx = readInt("Select request #: ", 1, all.size()) - 1;
+        MaintenanceRequest req = all.get(idx);
+        MaintenanceStatus st = pickEnum("New status", MaintenanceStatus.values());
+        List<User> staff = facade.getRepository().getUsers().stream()
+                .filter(u -> u.getRole() == UserRole.STAFF).collect(Collectors.toList());
+        println("Assign to staff (0 for no change):");
+        IntStream.range(0, staff.size()).forEach(i -> println("  " + (i + 1) + ". " + staff.get(i).getDisplayName()));
+        int si = readInt("Staff #: ", 0, staff.size());
+        String assignId = si == 0 ? null : staff.get(si - 1).getId();
+        try {
+            facade.assignMaintenance(currentUser, req.getId(), st, assignId);
+            println("Updated.");
+        } catch (UnauthorizedActionException | ScmsSystemException e) {
+            println("Error: " + e.getMessage());
+        }
+    }
+
+    private void analytics() {
+        println("\n-- Analytics --");
+        println("Bookings per room (id → count):");
+        facade.roomBookingCounts().forEach((k, v) -> println("  " + k + " → " + v));
+        println("Frequent words in maintenance descriptions (length > 3):");
+        facade.maintenanceDescriptionTokens().entrySet().stream()
+                .sorted((a, b) -> Long.compare(b.getValue(), a.getValue()))
+                .limit(12)
+                .forEach(e -> println("  " + e.getKey() + ": " + e.getValue()));
+    }
+
+    private void viewNotifications() {
+        println("\n-- My notifications --");
+        var list = facade.getRepository().notificationsForUser(currentUser.getId());
+        if (list.isEmpty()) {
+            println("  (none)");
+            return;
+        }
+        for (AppNotification n : list) {
+            println("  " + n.getCreatedAt() + " | " + n.getMessage());
         }
     }
 

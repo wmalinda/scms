@@ -1,7 +1,10 @@
 package com.scms.service;
 
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -9,11 +12,15 @@ import java.util.stream.Collectors;
 import com.scms.domain.Administrator;
 import com.scms.domain.AppNotification;
 import com.scms.domain.Booking;
+import com.scms.domain.MaintenanceRequest;
+import com.scms.domain.MaintenanceStatus;
+import com.scms.domain.MaintenanceUrgency;
 import com.scms.domain.Room;
 import com.scms.domain.RoomCategory;
 import com.scms.domain.StaffMember;
 import com.scms.domain.Student;
 import com.scms.domain.User;
+import com.scms.domain.UserRole;
 import com.scms.pattern.factory.RoomFactory;
 
 
@@ -28,6 +35,7 @@ public final class CampusRepository {
     private final List<AppNotification> notificationLog = new ArrayList<>();
      private final List<Room> rooms = new ArrayList<>();
     private final List<Booking> bookings = new ArrayList<>();
+    private final List<MaintenanceRequest> maintenanceRequests = new ArrayList<>();
 
     private CampusRepository(boolean withSeed) {
         if (withSeed) {
@@ -74,6 +82,22 @@ public final class CampusRepository {
         rooms.add(r2);
         rooms.add(r3);
 
+        bookings.add(new Booking(Booking.newId(), r1.getId(), staffId, LocalDate.now().plusDays(1),
+                LocalTime.of(10, 0), LocalTime.of(11, 30), false));
+        bookings.add(new Booking(Booking.newId(), r2.getId(), studentId, LocalDate.now().plusDays(2),
+                LocalTime.of(14, 0), LocalTime.of(16, 0), false));
+
+        MaintenanceRequest m1 = new MaintenanceRequest(MaintenanceRequest.newId(), r1.getId(),
+                "Projector flickering in front row", MaintenanceUrgency.HIGH, MaintenanceStatus.PENDING);
+        MaintenanceRequest m2 = new MaintenanceRequest(MaintenanceRequest.newId(), r2.getId(),
+                "One PC not booting", MaintenanceUrgency.MEDIUM, MaintenanceStatus.ASSIGNED);
+        m2.setAssignedToUserId(staffId);
+        maintenanceRequests.add(m1);
+        maintenanceRequests.add(m2);
+
+        notificationLog.add(new AppNotification(AppNotification.newId(), studentId,
+                "Welcome to Smart Campus — your bookings and alerts appear here.", java.time.Instant.now(), true));
+
     }
 
     public Optional<User> findUserByUsername(String username) {
@@ -82,10 +106,6 @@ public final class CampusRepository {
 
     public Optional<User> findUserById(String id) {
         return users.stream().filter(u -> u.getId().equals(id)).findFirst();
-    }
-
-    public void appendNotification(AppNotification n) {
-        notificationLog.add(n);
     }
 
     public List<User> getUsers() {
@@ -128,6 +148,35 @@ public final class CampusRepository {
 
     public List<Booking> bookingsForUser(String userId) {
         return bookings.stream().filter(b -> b.getUserId().equals(userId)).collect(Collectors.toList());
+    }
+
+    public void addMaintenance(MaintenanceRequest r) throws com.scms.exception.DuplicateDataException {
+        if (maintenanceRequests.stream().anyMatch(x -> x.getId().equals(r.getId()))) {
+            throw new com.scms.exception.DuplicateDataException("Duplicate maintenance id.");
+        }
+        maintenanceRequests.add(r);
+    }
+
+    public List<MaintenanceRequest> getMaintenanceRequests() {
+        return Collections.unmodifiableList(maintenanceRequests);
+    }
+
+    public Optional<MaintenanceRequest> findMaintenanceById(String id) {
+        return maintenanceRequests.stream().filter(m -> m.getId().equals(id)).findFirst();
+    }
+
+    public List<String> getAdministratorIds() {
+        return users.stream().filter(u -> u.getRole() == UserRole.ADMINISTRATOR).map(User::getId).toList();
+    }
+
+    public void appendNotification(AppNotification n) {
+        notificationLog.add(n);
+    }
+    
+    public List<AppNotification> notificationsForUser(String userId) {
+        return notificationLog.stream().filter(n -> n.getUserId().equals(userId))
+                .sorted(Comparator.comparing(AppNotification::getCreatedAt).reversed())
+                .collect(Collectors.toList());
     }
 
 }
